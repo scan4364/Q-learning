@@ -3,7 +3,7 @@ import random
 
 class QLearning:
     def __init__(self, alpha=0.1, gamma=0.97, epsilon=0.9, 
-                epsilon_decay=0.99, episodes=500, table_file = "resultado.txt"):
+                epsilon_decay=0.995, episodes=500, table_file = "resultado.txt"):
         """
         Parameters:
         - alpha: Learning rate (0 < alpha ≤ 1)
@@ -36,10 +36,9 @@ class QLearning:
 
     def choose_action(self, state):
         if random.uniform(0, 1) < self.epsilon:
-            # Exploration: choose random action
-            return random.randint(0, self.num_actions - 1)  
+            weights = [0.2, 0.2, 0.6]  # Higher chance of jumping
+            return random.choices([0, 1, 2], weights=weights)[0]
         else:
-            # Exploitation: choose best known action
             return self.q_table[state].index(max(self.q_table[state]))  
 
 
@@ -51,11 +50,9 @@ class QLearning:
         max_q_next_state = max(self.q_table[next_state])
         
         # Apply Bellman equation to update Q(s,a)
-        self.q_table[state][action] += self.alpha * (
-            reward +
-            self.gamma * max_q_next_state -
-            self.q_table[state][action]
-        )
+        target = reward + self.gamma * max_q_next_state
+        self.q_table[state][action] += self.alpha * (target - self.q_table[state][action])
+
         
 
     def update_epsilon(self):
@@ -63,9 +60,8 @@ class QLearning:
         Updates epsilon value after each episode.
         Gradually decreases epsilon to the minimum value to reduce exploration.
         """
-        self.epsilon *= self.epsilon_decay
-        if self.epsilon < 0.01:
-            self.epsilon = 0.01
+        self.epsilon = max(self.epsilon * self.epsilon_decay, 0.01)
+
         return self.epsilon
         
         
@@ -93,10 +89,8 @@ class QLearning:
         for episode in range(self.episodes):
             print(f"Starting episode {episode + 1}/{self.episodes}...")
             
-            # Inicializar estado (estado inicial = 0)
             current_state = 0
             steps = 0
-            max_steps = 100
             done = False
             
             while not done:
@@ -111,13 +105,8 @@ class QLearning:
                 current_state = next_state
                 steps += 1
                 
-                if reward == -1:
-                    print("SUCCESS!")
-                    done = True
-                    
-                elif reward == -14:
-                    print("FAILURE!")
-                    done = True
+                done = self.sucess_criterion(reward, steps)
+
                 
         self.epsilon = self.update_epsilon()
         if episode % 10 == 0:
@@ -127,6 +116,19 @@ class QLearning:
         self.save_q_table()
         print("Training completed.")
 
+
+    def sucess_criterion(self, reward, step_count):
+        if reward == -1:
+            print("Success!")
+            return True
+        elif reward == -100:
+            print("Failure!")
+            return True
+        elif step_count >= 150:
+            print("Timeout.")
+            return True
+        
+        return False
 
     def test_policy(self, socket, num_tests=20):
         """
@@ -138,10 +140,8 @@ class QLearning:
         for test in range(num_tests):
             print(f"Starting test {test + 1}/{num_tests}...")
             
-            # Inicializar estado (estado inicial = 0)
             current_state = 0
-            steps = 0
-            max_steps = 100
+            step_count = 0
             done = False
             
             while not done:
@@ -153,23 +153,11 @@ class QLearning:
                 next_state = int(next_state, 2)
                 reward = float(reward)
                 
-                current_state = next_state
-                steps += 1
+                done = self.sucess_criterion(reward, step_count)
 
-                # Success criterion
-                if reward == -1:
-                    num_successes += 1
-                    print(f"Test {test + 1}: SUCCESS!")
-                    done = True
-                # Failure criterion
-                elif reward == -14:
-                    print(f"Test {test + 1}: FAILURE!")
-                    done = True
-                # Prevent infinite tests
-                elif steps >= max_steps:
-                    print(f"Test {test + 1}: TIMEOUT - reached max steps.")
-                    done = True
-        
+                current_state = next_state
+                step_count += 1
+                
         success_rate = (num_successes / num_tests) * 100
         return success_rate
 
